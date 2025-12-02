@@ -1,4 +1,4 @@
-# action.yml
+# action.yml 
 name: "Branch Flow Detector"
 description: "Detects code changes in a Pull Request and validates the branch flow (dev → staging → main)."
 author: "Ricardo Malnati"
@@ -7,31 +7,32 @@ branding:
   icon: "git-branch"
   color: "purple"
 
+inputs:
+  token:
+    description: "GitHub token (ex.: secrets.GITHUB_TOKEN)"
+    required: true
+
 outputs:
   has_code:
-    description: "Indicates if the PR contains code changes"
+    description: "Indica se a PR contém alterações de código"
     value: ${{ steps.detect-code.outputs.has_code }}
   allowed:
-    description: "Indicates if the branch flow is allowed (dev → staging → main)"
+    description: "Indica se o fluxo de branches é permitido (dev → staging → main)"
     value: ${{ steps.branch-flow.outputs.allowed }}
   head_branch:
-    description: "Source branch name (PR head)"
+    description: "Nome da branch de origem da PR"
     value: ${{ steps.branch-flow.outputs.head_branch }}
   base_branch:
-    description: "Target branch name (PR base)"
+    description: "Nome da branch de destino da PR"
     value: ${{ steps.branch-flow.outputs.base_branch }}
-  default_branch:
-    description: "Repository default branch"
-    value: ${{ steps.branch-flow.outputs.default_branch }}
 
 runs:
   using: "composite"
   steps:
-    - name: Detect code changes
-      id: detect-code
+    - id: detect-code
       shell: bash
       env:
-        GITHUB_TOKEN: ${{ github.token }}
+        GITHUB_TOKEN: ${{ inputs.token }}
         REPO: ${{ github.repository }}
         PR_NUMBER: ${{ github.event.pull_request.number }}
       run: |
@@ -93,8 +94,7 @@ runs:
           echo "has_code=$HAS_CODE"
         } >> "$GITHUB_OUTPUT"
 
-    - name: Evaluate branch flow
-      id: branch-flow
+    - id: branch-flow
       shell: bash
       env:
         HAS_CODE: ${{ steps.detect-code.outputs.has_code }}
@@ -167,8 +167,7 @@ runs:
           echo "default_branch=$DEFAULT_BRANCH"
         } >> "$GITHUB_OUTPUT"
 
-    - name: Build flow-check comment
-      id: build-pr-message
+    - id: build-pr-message
       shell: bash
       env:
         GITHUB_ACTOR: ${{ github.actor }}
@@ -214,10 +213,10 @@ runs:
           echo "footer_advise=$FOOTER_ADVISE"
         } >> "$GITHUB_OUTPUT"
 
-    - name: Comment flow-check status
+    - id: comment
       uses: Malnati/pr-comment@v4
       with:
-        token: ${{ github.token }}
+        token: ${{ inputs.token }}
         pr_number: ${{ github.event.pull_request.number }}
         header_actor: ${{ steps.build-pr-message.outputs.header_actor }}
         header_title: ${{ steps.build-pr-message.outputs.header_title }}
