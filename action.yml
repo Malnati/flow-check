@@ -219,7 +219,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Comment flow-check status
-        uses: Malnati/pr-comment@v2
+        uses: Malnati/pr-comment@v4
         with:
           token: ${{ github.token }}
           pr_number: ${{ github.event.pull_request.number }}
