@@ -1,5 +1,5 @@
 # action.yml
-name: "Flow Check"
+name: "Branch Flow Detector"
 description: "Detects code changes in a Pull Request and validates the branch flow (dev → staging → main)."
 author: "Ricardo Malnati"
 
