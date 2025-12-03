@@ -13,9 +13,6 @@ inputs:
     required: true
 
 outputs:
-  has_code:
-    description: "Indica se a PR contém alterações de código"
-    value: ${{ steps.detect_code.outputs.has_code }}
   allowed:
     description: "Indica se o fluxo de branches é permitido"
     value: ${{ steps.validate_flow.outputs.allowed }}
@@ -30,68 +27,7 @@ runs:
   using: "composite"
   steps:
     # ========================================================================
-    # STEP 1: DETECÇÃO DE ARQUIVOS DE CÓDIGO
-    # Responsabilidade: Iterar sobre arquivos do PR e flagrar extensões de código
-    # ========================================================================
-    - id: detect_code
-      shell: bash
-      env:
-        TOKEN: ${{ inputs.token }}
-        REPO: ${{ github.repository }}
-        PR_NUM: ${{ github.event.pull_request.number }}
-        # Extensões definidas como variável de ambiente para fácil manutenção
-        CODE_EXTENSIONS: ".js .jsx .ts .tsx .java .kt .kts .py .rb .go .php .cs .c .cpp .h .hpp .rs .swift .sql .sh .bash .ps1"
-      run: |
-        set -euo pipefail
-
-        PER_PAGE=100
-        PAGE=1
-        HAS_CODE="false"
-        API_URL="https://api.github.com/repos/$REPO/pulls/$PR_NUM/files"
-
-        echo "Iniciando verificação de arquivos na PR #$PR_NUM..."
-
-        while :; do
-          # Busca paginada de arquivos
-          RESP="$(curl -sS -H "Authorization: Bearer $TOKEN" \
-                           -H "Accept: application/vnd.github+json" \
-                           "$API_URL?per_page=$PER_PAGE&page=$PAGE")"
-
-          # Conta arquivos na página atual
-          COUNT="$(echo "$RESP" | jq 'length')"
-
-          if [ "$COUNT" -eq 0 ]; then
-            break
-          fi
-
-          # Extrai lista de nomes de arquivos
-          FILENAMES="$(echo "$RESP" | jq -r '.[].filename')"
-
-          # Itera sobre os arquivos encontrados
-          while IFS= read -r FILE; do
-            if [ -z "$FILE" ]; then continue; fi
-            
-            for EXT in $CODE_EXTENSIONS; do
-              # Verifica se o arquivo termina com a extensão (glob matching)
-              if [[ "$FILE" == *"$EXT" ]]; then
-                echo "Código detectado: $FILE matches $EXT"
-                HAS_CODE="true"
-                break 3 # Sai dos dois loops (for e while interno) e do while principal
-              fi
-            done
-          done <<< "$FILENAMES"
-
-          if [ "$COUNT" -lt "$PER_PAGE" ]; then
-            break
-          fi
-          
-          PAGE=$((PAGE + 1))
-        done
-
-        echo "has_code=$HAS_CODE" >> "$GITHUB_OUTPUT"
-
-    # ========================================================================
-    # STEP 2: CLASSIFICAR BRANCH DE DESTINO (BASE)
+    # STEP 1: CLASSIFICAR BRANCH DE DESTINO (BASE)
     # Responsabilidade: Identificar se o alvo é Prod, Stage ou Dev
     # ========================================================================
     - id: classify_base
@@ -120,7 +56,7 @@ runs:
         echo "base_type=$TYPE" >> "$GITHUB_OUTPUT"
 
     # ========================================================================
-    # STEP 3: CLASSIFICAR BRANCH DE ORIGEM (HEAD)
+    # STEP 2: CLASSIFICAR BRANCH DE ORIGEM (HEAD)
     # Responsabilidade: Identificar se a origem é Stage ou Dev
     # ========================================================================
     - id: classify_head
@@ -144,7 +80,7 @@ runs:
         echo "head_type=$TYPE" >> "$GITHUB_OUTPUT"
 
     # ========================================================================
-    # STEP 4: VALIDAR FLUXO (REGRA DE NEGÓCIO)
+    # STEP 3: VALIDAR FLUXO (REGRA DE NEGÓCIO)
     # Responsabilidade: Cruzar Base vs Head e definir 'Allowed'
     # ========================================================================
     - id: validate_flow
@@ -176,14 +112,13 @@ runs:
         echo "reason=$REASON" >> "$GITHUB_OUTPUT"
 
     # ========================================================================
-    # STEP 5: CONSTRUIR MENSAGEM
+    # STEP 4: CONSTRUIR MENSAGEM
     # Responsabilidade: Montar texto do comentário baseado nos resultados anteriores
     # ========================================================================
     - id: build_message
       shell: bash
       env:
         ACTOR: ${{ github.actor }}
-        HAS_CODE: ${{ steps.detect_code.outputs.has_code }}
         ALLOWED: ${{ steps.validate_flow.outputs.allowed }}
         REASON: ${{ steps.validate_flow.outputs.reason }}
         HEAD: ${{ github.event.pull_request.head.ref }}
@@ -246,7 +181,7 @@ runs:
         } >> "$GITHUB_OUTPUT"
 
     # ========================================================================
-    # STEP 6: POSTAR COMENTÁRIO
+    # STEP 5: POSTAR COMENTÁRIO
     # ========================================================================
     - id: post_comment
       uses: Malnati/pr-comment@v4
