@@ -184,7 +184,7 @@ runs:
     # STEP 5: POSTAR COMENTÁRIO
     # ========================================================================
     - id: post_comment
-      uses: Malnati/pr-comment@v4
+      uses: Malnati/pr-comment@v4.0.5
       with:
         token: ${{ inputs.token }}
         pr_number: ${{ github.event.pull_request.number }}
