@@ -196,3 +196,4 @@ runs:
         body_todo: "" # Não utilizado nesta action
         footer_result: ${{ steps.build_message.outputs.footer_result }}
         footer_advise: ${{ steps.build_message.outputs.footer_advise }}
+        template_path: "message.md"
