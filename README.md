@@ -74,12 +74,19 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
 
+permissions:
+  contents: read        # Necessário para o checkout
+  pull-requests: write  # Necessário para comentar na PR
+
 jobs:
   flow-guard:
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
       - name: Validate Branch Flow
-        uses: Malnati/flow-check@v1.0.0
+        uses: Malnati/flow-check@v2.0.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 ```
@@ -96,10 +103,11 @@ Você pode usar as variáveis padrão (`$ACTOR`, `$SUBJECT`, etc.).
 **2. Aponte no Workflow:**
 
 ```yaml
-- uses: Malnati/flow-check@v1.0.0
-  with:
-    token: ${{ secrets.GITHUB_TOKEN }}
-    custom_template: ".github/templates/flow-msg.md" # Caminho relativo
+      - name: Validate Branch Flow
+        uses: Malnati/flow-check@v2.0.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          custom_template: ".github/workflows/flow-check.md"
 ```
 
 ### 🧩 Mapeamento de Variáveis
