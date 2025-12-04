@@ -135,7 +135,7 @@ runs:
       run: |
         set -euo pipefail
 
-        HEADER_TITLE="🔀 Branch Flow Guard"
+        HEADER_TITLE="🛡️ Branch Flow Guard"
         HEADER_SUBJECT="$HEAD &rarr; $BASE" 
         
         # O flow-check agora é responsável por criar a lista HTML
