@@ -12,6 +12,7 @@
   <a href="#-sobre">Sobre</a> •
   <a href="#-regras-do-fluxo">Regras</a> •
   <a href="#-instalação">Instalação</a> •
+  <a href="#-customizando-a-mensagem">Customização</a> •
   <a href="#-inputs--outputs">Inputs & Outputs</a>
 </p>
 
@@ -28,7 +29,7 @@ Além disso, ele detecta inteligentemente se há alterações reais de código o
 ### ✨ O que ele faz
 1.  **Validação de Fluxo:** Bloqueia merges diretos de `dev` para `production` ou features direto para `staging`.
 2.  **Smart Diff:** Ignora validações estritas se a mudança for apenas em arquivos de documentação (ex: `README.md`).
-3.  **Feedback Visual:** Posta um comentário claro no PR explicando por que o fluxo foi aprovado ou rejeitado.
+3.  **Feedback Visual:** Posta um comentário claro no PR (estilo Dashboard) explicando o status.
 4.  **Integração:** Expõe `outputs` para você encadear outras actions (como auto-sync ou deploys).
 
 ---
@@ -54,8 +55,6 @@ graph LR
 
 ## 📦 Instalação
 
-Adicione este job no topo do seu workflow de Pull Request.
-
 ### Permissões Necessárias
 
 Como esta action posta comentários no PR, você precisa conceder permissão de escrita.
@@ -78,12 +77,8 @@ on:
 jobs:
   flow-guard:
     runs-on: ubuntu-latest
-    permissions:
-      pull-requests: write
-      contents: read
     steps:
       - name: Validate Branch Flow
-        id: check
         uses: Malnati/flow-check@v1.0.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -91,13 +86,42 @@ jobs:
 
 -----
 
+## 🎨 Customizando a Mensagem
+
+Por padrão, esta action usa um template visual de "Dashboard". Se você quiser usar seu próprio layout Markdown, basta criar um arquivo no seu repositório e referenciá-lo.
+
+**1. Crie o arquivo `.github/templates/flow-msg.md`**
+Você pode usar as variáveis padrão (`$ACTOR`, `$SUBJECT`, etc.).
+
+**2. Aponte no Workflow:**
+
+```yaml
+- uses: Malnati/flow-check@v1.0.0
+  with:
+    token: ${{ secrets.GITHUB_TOKEN }}
+    custom_template: ".github/templates/flow-msg.md" # Caminho relativo
+```
+
+### 🧩 Mapeamento de Variáveis
+
+Veja o que o `flow-check` preenche automaticamente em cada variável do template:
+
+| Variável | Conteúdo Preenchido pelo Flow Guard |
+| :--- | :--- |
+| `$TITLE` | "🔀 Branch Flow Guard" |
+| `$SUBJECT` | Visualização do fluxo com seta (ex: `feature/login → develop`) |
+| `$BODY_MESSAGE` | A mensagem de status principal (ex: "✅ Autorizado..." ou "⛔ Bloqueado..."). |
+| `$BODY_SCOPE_BLOCK` | Lista HTML contendo detalhes das branches e, em caso de erro, o motivo da violação. |
+| `$FOOTER_BLOCK` | Resumo do resultado ("Permitido", "Negado" ou "Skipped"). |
+
+-----
+
 ## ⛓️ Exemplo Avançado (Job Chaining)
 
-O poder real desta action está em usar seus **Outputs** para controlar a execução de jobs subsequentes (ex: só rodar testes pesados ou sync se o fluxo for válido).
+Use os **Outputs** para controlar a execução de jobs subsequentes (ex: só rodar testes pesados se o fluxo for válido).
 
 ```yaml
 jobs:
-  # 1. O Porteiro
   governance:
     runs-on: ubuntu-latest
     outputs:
@@ -110,13 +134,13 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
-  # 2. Job Pesado (Só roda se permitido e tiver código)
   heavy-tests:
     needs: governance
+    # Só roda se permitido E se tiver código (ignora docs)
     if: ${{ needs.governance.outputs.allowed == 'true' && needs.governance.outputs.has_code == 'true' }}
     runs-on: ubuntu-latest
     steps:
-      - run: echo "Rodando testes de integração..."
+      - run: echo "Rodando testes..."
 ```
 
 -----
@@ -125,13 +149,12 @@ jobs:
 
 ### Inputs
 
-| Input | Obrigatório | Descrição |
-| :--- | :---: | :--- |
-| `token` | **Sim** | Token do GitHub (`secrets.GITHUB_TOKEN`) para ler diffs e postar comentários. |
+| Input | Obrigatório | Padrão | Descrição |
+| :--- | :---: | :---: | :--- |
+| `token` | **Sim** | - | Token do GitHub (`secrets.GITHUB_TOKEN`) para ler diffs e postar comentários. |
+| `custom_template` | Não | `""` | Caminho relativo para um arquivo Markdown caso queira substituir o layout padrão. |
 
 ### Outputs
-
-Valores retornados para uso em steps seguintes (`${{ steps.id.outputs.nome }}`).
 
 | Output | Tipo | Descrição |
 | :--- | :---: | :--- |
