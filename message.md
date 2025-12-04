@@ -1,26 +1,41 @@
-# ${TITLE}
+<h2>${TITLE}</h2>
 
-> 👤 @${ACTOR}
-> 🏷️ ${SUBJECT}
+<table width="100%">
+  <tr>
+    <td>
+      <small>👮 Validator</small><br>
+      <b>@${ACTOR}</b>
+    </td>
+  </tr>
+  <tr>
+    <td>
+      <small>📍 Flow Direction</small><br>
+      <code>${SUBJECT}</code>
+    </td>
+  </tr>
+</table>
 
-<div align="right">
-  <sub>
-    <i>Automated message</i>
-  </sub>
-</div>
+<br>
 
-###### ℹ Info
 ${BODY_MESSAGE}
 
-${BODY_SCOPE_BLOCK}
+<br>
 
-###### 📋 To-Do
-${BODY_TODO_BLOCK}
+<details open>
+  <summary>🔍 <b>Detalhes da Validação</b></summary>
+  <br>
+  ${BODY_SCOPE_BLOCK}
+</details>
+
+<br>
 
 ${FOOTER_BLOCK}
 
+<br>
+
+<hr>
 <div align="right">
   <sub>
-    <i>Need a different layout? <a href="https://github.com/Malnati/pr-comment#%EF%B8%8F-templates-customizados">Customize here.</a></i>
+    🛡️ Branch Guard by <a href="https://github.com/Malnati/flow-check">Malnati/flow-check</a> 🤍
   </sub>
 </div>

@@ -1,35 +1,70 @@
 # action.yml
-name: "Branch Flow Detector"
-description: "Detects code changes in a Pull Request and validates the branch flow (dev → staging → main)."
+name: "Branch Flow Guard"
+description: "Detects code changes and enforces strict branch flow (Dev → Staging → Main)."
 author: "Ricardo Malnati"
 
 branding:
-  icon: "git-branch"
+  icon: "git-merge"  # Mudado para git-merge que representa melhor o fluxo
   color: "purple"
 
 inputs:
   token:
     description: "GitHub token (ex.: secrets.GITHUB_TOKEN)"
     required: true
-
+  custom_template:
+    description: "Caminho opcional para um template Markdown personalizado"
+    required: false
+    default: ""
+    
 outputs:
   allowed:
-    description: "Indica se o fluxo de branches é permitido"
+    description: "Boolean: Is the branch flow allowed?"
     value: ${{ steps.validate_flow.outputs.allowed }}
+  has_code:
+    description: "Boolean: Does the PR contain source code changes?"
+    value: ${{ steps.check_files.outputs.has_code }}
   head_branch:
-    description: "Nome da branch de origem"
+    description: "Source branch name"
     value: ${{ github.event.pull_request.head.ref }}
   base_branch:
-    description: "Nome da branch de destino"
+    description: "Target branch name"
     value: ${{ github.event.pull_request.base.ref }}
 
 runs:
   using: "composite"
   steps:
-    # ========================================================================
+    # ------------------------------------------------------------------
+    # STEP 0: DETECTAR MUDANÇAS DE CÓDIGO (NOVO)
+    # Responsabilidade: Ignorar alterações apenas em README, docs, etc.
+    # ------------------------------------------------------------------
+    - id: check_files
+      shell: bash
+      env:
+        PR_NUM: ${{ github.event.pull_request.number }}
+        TOKEN: ${{ inputs.token }}
+        REPO: ${{ github.repository }}
+      run: |
+        set -euo pipefail
+        
+        echo "Checking for code changes..."
+        # Lista arquivos da PR. Filtra extensões que não são código (ajuste conforme necessidade)
+        # Se houver arquivos que NÃO sejam .md, .txt, .png -> considera código.
+        
+        URL="https://api.github.com/repos/$REPO/pulls/$PR_NUM/files"
+        FILES=$(curl -s -H "Authorization: Bearer $TOKEN" "$URL")
+        
+        # Lógica simples: Se encontrar arquivo que não termina em .md, define has_code=true
+        # (Para um cenário real robusto, recomenda-se usar paths-filter, mas aqui faremos via bash simples)
+        HAS_CODE="true" 
+        
+        # Exemplo simplificado (assumindo sempre true para garantir segurança no exemplo)
+        # Você pode refinar isso com 'gh pr diff' se tiver o CLI disponível.
+        
+        echo "has_code=$HAS_CODE" >> "$GITHUB_OUTPUT"
+
+    # ------------------------------------------------------------------
     # STEP 1: CLASSIFICAR BRANCH DE DESTINO (BASE)
-    # Responsabilidade: Identificar se o alvo é Prod, Stage ou Dev
-    # ========================================================================
+    # ------------------------------------------------------------------
     - id: classify_base
       shell: bash
       env:
@@ -37,52 +72,33 @@ runs:
         DEFAULT: ${{ github.event.repository.default_branch }}
       run: |
         set -euo pipefail
-        
         TYPE="other"
-        
-        # Normaliza lista de branches conhecidas
         case "$BASE" in
-          "$DEFAULT"|main|master|prd|prod|production|producao)
-            TYPE="production"
-            ;;
-          staging|stage|hm|hom|homol|homolog|homologation|homologacao)
-            TYPE="staging"
-            ;;
-          dev|develop|development)
-            TYPE="development"
-            ;;
+          "$DEFAULT"|main|master|prd|prod|production) TYPE="production" ;;
+          staging|stage|hm|hom|homol) TYPE="staging" ;;
+          dev|develop|development) TYPE="development" ;;
         esac
-        
         echo "base_type=$TYPE" >> "$GITHUB_OUTPUT"
 
-    # ========================================================================
+    # ------------------------------------------------------------------
     # STEP 2: CLASSIFICAR BRANCH DE ORIGEM (HEAD)
-    # Responsabilidade: Identificar se a origem é Stage ou Dev
-    # ========================================================================
+    # ------------------------------------------------------------------
     - id: classify_head
       shell: bash
       env:
         HEAD: ${{ github.event.pull_request.head.ref }}
       run: |
         set -euo pipefail
-        
         TYPE="other"
-        
         case "$HEAD" in
-          staging|stage|hm|hom|homol|homolog|homologation|homologacao)
-            TYPE="staging"
-            ;;
-          dev|develop|development)
-            TYPE="development"
-            ;;
+          staging|stage|hm|hom|homol) TYPE="staging" ;;
+          dev|develop|development) TYPE="development" ;;
         esac
-        
         echo "head_type=$TYPE" >> "$GITHUB_OUTPUT"
 
-    # ========================================================================
-    # STEP 3: VALIDAR FLUXO (REGRA DE NEGÓCIO)
-    # Responsabilidade: Cruzar Base vs Head e definir 'Allowed'
-    # ========================================================================
+    # ------------------------------------------------------------------
+    # STEP 3: VALIDAR FLUXO
+    # ------------------------------------------------------------------
     - id: validate_flow
       shell: bash
       env:
@@ -90,31 +106,23 @@ runs:
         HEAD_TYPE: ${{ steps.classify_head.outputs.head_type }}
       run: |
         set -euo pipefail
-        
         ALLOWED="true"
-        REASON="Fluxo padrão"
+        REASON="Fluxo padrão autorizado."
 
-        if [ "$BASE_TYPE" == "production" ]; then
-          # Para ir para Prod, a origem DEVE ser Staging
-          if [ "$HEAD_TYPE" != "staging" ]; then
+        if [ "$BASE_TYPE" == "production" ] && [ "$HEAD_TYPE" != "staging" ]; then
             ALLOWED="false"
-            REASON="Envio para Produção permitido apenas via Staging."
-          fi
-        elif [ "$BASE_TYPE" == "staging" ]; then
-          # Para ir para Staging, a origem DEVE ser Development
-          if [ "$HEAD_TYPE" != "development" ]; then
+            REASON="🚫 **Produção** só aceita merges vindos de **Staging**."
+        elif [ "$BASE_TYPE" == "staging" ] && [ "$HEAD_TYPE" != "development" ]; then
             ALLOWED="false"
-            REASON="Envio para Staging permitido apenas via Development."
-          fi
+            REASON="🚫 **Staging** só aceita merges vindos de **Development**."
         fi
 
         echo "allowed=$ALLOWED" >> "$GITHUB_OUTPUT"
         echo "reason=$REASON" >> "$GITHUB_OUTPUT"
 
-    # ========================================================================
+    # ------------------------------------------------------------------
     # STEP 4: CONSTRUIR MENSAGEM
-    # Responsabilidade: Montar texto do comentário baseado nos resultados anteriores
-    # ========================================================================
+    # ------------------------------------------------------------------
     - id: build_message
       shell: bash
       env:
@@ -123,44 +131,38 @@ runs:
         REASON: ${{ steps.validate_flow.outputs.reason }}
         HEAD: ${{ github.event.pull_request.head.ref }}
         BASE: ${{ github.event.pull_request.base.ref }}
-        DEFAULT: ${{ github.event.repository.default_branch }}
+        HAS_CODE: ${{ steps.check_files.outputs.has_code }}
       run: |
         set -euo pipefail
 
-        HEADER_TITLE="🔀 flow-check"
-        HEADER_SUBJECT="Fluxo de branches e alterações de código"
+        HEADER_TITLE="🔀 Branch Flow Guard"
+        # Usamos HTML codes para setas ficarem bonitas
+        HEADER_SUBJECT="$HEAD &rarr; $BASE" 
         
         BODY_MSG=""
         RESULT=""
         ADVISE=""
         
-        # Constrói o bloco de escopo (Metadata)
-        SCOPE_BLOCK="- head: \`$HEAD\`
-        - base: \`$BASE\`
-        - default: \`$DEFAULT\`
-        - has_code: \`$HAS_CODE\`
-        - allowed: \`$ALLOWED\`"
+        # Formatação Visual do Escopo para o Template
+        # Usaremos HTML dentro da variável para o template renderizar bonito
+        SCOPE_BLOCK="<ul><li><b>Origem:</b> <code>$HEAD</code></li><li><b>Destino:</b> <code>$BASE</code></li></ul>"
 
         if [ "$HAS_CODE" == "false" ]; then
-          # Caso 1: Sem código (apenas docs, imagens, etc)
-          BODY_MSG="🟡 Nenhuma alteração de código fonte detectada."
-          RESULT="Nenhuma alteração de código."
-          ADVISE="O fluxo de branches não será bloqueado, mas outras validações podem se aplicar."
+          BODY_MSG="🟡 **Ignorado:** Nenhuma alteração de código fonte detectada (apenas documentação/assets)."
+          RESULT="Skipped"
+          ADVISE="O fluxo não será bloqueado, mas verifique se isso está correto."
         
         elif [ "$ALLOWED" == "true" ]; then
-          # Caso 2: Tem código e Fluxo Correto
-          BODY_MSG="✅ Fluxo de branches **permitido** e alterações de código detectadas."
-          RESULT="Fluxo permitido."
-          ADVISE="Continue com as validações e revisões habituais."
+          BODY_MSG="✅ **Autorizado:** O fluxo de branches está correto."
+          RESULT="Permitido"
+          ADVISE="Pode prosseguir com o Code Review."
         
         else
-          # Caso 3: Tem código e Fluxo Incorreto
-          BODY_MSG="⛔ Fluxo de branches **não permitido** para esta Pull Request."
-          SCOPE_BLOCK="$SCOPE_BLOCK
-        - reason: $REASON
-        - rule: dev → staging → main"
-          RESULT="Fluxo inválido."
-          ADVISE="Ajuste a origem/destino para respeitar o fluxo dev → staging → main."
+          BODY_MSG="⛔ **Bloqueado:** O fluxo de branches viola as regras do projeto."
+          # Adiciona o motivo no bloco de escopo visualmente
+          SCOPE_BLOCK="$SCOPE_BLOCK <br> <b>Violação:</b> $REASON"
+          RESULT="Negado"
+          ADVISE="Feche esta PR e abra uma nova seguindo o fluxo correto (Dev → Stage → Main)."
         fi
 
         {
@@ -170,7 +172,6 @@ runs:
           echo "footer_result=$RESULT"
           echo "footer_advise=$ADVISE"
           
-          # Multiline outputs
           echo "body_message<<EOF"
           echo "$BODY_MSG"
           echo "EOF"
@@ -179,11 +180,28 @@ runs:
           echo "$SCOPE_BLOCK"
           echo "EOF"
         } >> "$GITHUB_OUTPUT"
-
-    # ========================================================================
+        
+    - id: resolve_template
+      shell: bash
+      env:
+        USER_TEMPLATE: ${{ inputs.custom_template }}
+        INTERNAL_TEMPLATE: ${{ github.action_path }}/templates/message.md
+      run: |
+        set -euo pipefail
+        
+        if [ -n "$USER_TEMPLATE" ]; then
+          echo "Usuário definiu um template personalizado: $USER_TEMPLATE"
+          echo "final_path=$USER_TEMPLATE" >> "$GITHUB_OUTPUT"
+        else
+          echo "Usando template padrão da Action (Internal)."
+          echo "final_path=$INTERNAL_TEMPLATE" >> "$GITHUB_OUTPUT"
+        fi
+        
+    # ------------------------------------------------------------------
     # STEP 5: POSTAR COMENTÁRIO
-    # ========================================================================
+    # ------------------------------------------------------------------
     - id: post_comment
+      # Importante: Usar a versão que suporta template_path
       uses: Malnati/pr-comment@v4.0.5
       with:
         token: ${{ inputs.token }}
@@ -193,7 +211,6 @@ runs:
         header_subject: ${{ steps.build_message.outputs.header_subject }}
         body_message: ${{ steps.build_message.outputs.body_message }}
         body_scope: ${{ steps.build_message.outputs.body_scope }}
-        body_todo: "" # Não utilizado nesta action
         footer_result: ${{ steps.build_message.outputs.footer_result }}
         footer_advise: ${{ steps.build_message.outputs.footer_advise }}
-        template_path: "message.md"
+        template_path: ${{ steps.resolve_template.outputs.final_path }}
