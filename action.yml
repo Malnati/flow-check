@@ -121,7 +121,7 @@ runs:
         echo "reason=$REASON" >> "$GITHUB_OUTPUT"
 
     # ------------------------------------------------------------------
-    # STEP 4: CONSTRUIR MENSAGEM
+    # STEP 4: CONSTRUIR MENSAGEM (Com Formatação HTML Completa)
     # ------------------------------------------------------------------
     - id: build_message
       shell: bash
@@ -136,41 +136,43 @@ runs:
         set -euo pipefail
 
         HEADER_TITLE="🔀 Branch Flow Guard"
-        # Usamos HTML codes para setas ficarem bonitas
         HEADER_SUBJECT="$HEAD &rarr; $BASE" 
         
-        BODY_MSG=""
-        RESULT=""
-        ADVISE=""
-        
-        # Formatação Visual do Escopo para o Template
-        # Usaremos HTML dentro da variável para o template renderizar bonito
-        SCOPE_BLOCK="<ul><li><b>Origem:</b> <code>$HEAD</code></li><li><b>Destino:</b> <code>$BASE</code></li></ul>"
+        # O flow-check agora é responsável por criar a lista HTML
+        SCOPE_BLOCK="<ul><li><b>Origem:</b> <code>$HEAD</code></li><li><b>Destino:</b> <code>$BASE</code></li>"
 
         if [ "$HAS_CODE" == "false" ]; then
-          BODY_MSG="🟡 **Ignorado:** Nenhuma alteração de código fonte detectada (apenas documentação/assets)."
-          RESULT="Skipped"
-          ADVISE="O fluxo não será bloqueado, mas verifique se isso está correto."
+          BODY_MSG="🟡 <b>Ignorado:</b> Nenhuma alteração de código fonte detectada."
+          RESULT_TEXT="Skipped"
+          ADVISE_TEXT="O fluxo não será bloqueado."
         
         elif [ "$ALLOWED" == "true" ]; then
-          BODY_MSG="✅ **Autorizado:** O fluxo de branches está correto."
-          RESULT="Permitido"
-          ADVISE="Pode prosseguir com o Code Review."
+          BODY_MSG="✅ <b>Autorizado:</b> O fluxo de branches está correto."
+          RESULT_TEXT="Permitido"
+          ADVISE_TEXT="Pode prosseguir com o Code Review."
         
         else
-          BODY_MSG="⛔ **Bloqueado:** O fluxo de branches viola as regras do projeto."
-          # Adiciona o motivo no bloco de escopo visualmente
-          SCOPE_BLOCK="$SCOPE_BLOCK <br> <b>Violação:</b> $REASON"
-          RESULT="Negado"
-          ADVISE="Feche esta PR e abra uma nova seguindo o fluxo correto (Dev → Stage → Main)."
+          BODY_MSG="⛔ <b>Bloqueado:</b> O fluxo de branches viola as regras."
+          SCOPE_BLOCK="${SCOPE_BLOCK}<li><b>Violação:</b> ${REASON}</li>"
+          RESULT_TEXT="Negado"
+          ADVISE_TEXT="Feche esta PR e siga o fluxo (Dev → Staging → Main)."
         fi
+        
+        SCOPE_BLOCK="${SCOPE_BLOCK}</ul>"
+
+        # AQUI MUDOU: O flow-check adiciona os labels HTML (<b>Resultado:</b>)
+        # O pr-comment vai receber isso e apenas imprimir.
+        FINAL_RESULT="<b>Resultado:</b> ${RESULT_TEXT}"
+        FINAL_ADVISE="<b>Orientação:</b> ${ADVISE_TEXT}"
 
         {
           echo "header_actor=$ACTOR"
           echo "header_title=$HEADER_TITLE"
           echo "header_subject=$HEADER_SUBJECT"
-          echo "footer_result=$RESULT"
-          echo "footer_advise=$ADVISE"
+          
+          # Passamos o HTML completo
+          echo "footer_result=$FINAL_RESULT"
+          echo "footer_advise=$FINAL_ADVISE"
           
           echo "body_message<<EOF"
           echo "$BODY_MSG"
@@ -180,22 +182,6 @@ runs:
           echo "$SCOPE_BLOCK"
           echo "EOF"
         } >> "$GITHUB_OUTPUT"
-        
-    - id: resolve_template
-      shell: bash
-      env:
-        USER_TEMPLATE: ${{ inputs.custom_template }}
-        INTERNAL_TEMPLATE: ${{ github.action_path }}/templates/message.md
-      run: |
-        set -euo pipefail
-        
-        if [ -n "$USER_TEMPLATE" ]; then
-          echo "Usuário definiu um template personalizado: $USER_TEMPLATE"
-          echo "final_path=$USER_TEMPLATE" >> "$GITHUB_OUTPUT"
-        else
-          echo "Usando template padrão da Action (Internal)."
-          echo "final_path=$INTERNAL_TEMPLATE" >> "$GITHUB_OUTPUT"
-        fi
         
     # ------------------------------------------------------------------
     # STEP 5: POSTAR COMENTÁRIO
