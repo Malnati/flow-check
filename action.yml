@@ -188,7 +188,7 @@ runs:
     # ------------------------------------------------------------------
     - id: post_comment
       # Importante: Usar a versão que suporta template_path
-      uses: Malnati/pr-comment@v4.1.5
+      uses: Malnati/pr-comment@v4.2.5
       with:
         token: ${{ inputs.token }}
         pr_number: ${{ github.event.pull_request.number }}
